@@ -253,7 +253,7 @@ def apply_movement(product_id, kind, qty, note):
         old = row.stock
         new = old + qty if kind == "IN" else old - qty
         if new < 0:
-            raise ValueError(f"موجودی کافی نیست (موجودی فعلی: {fmt(old)})")
+            raise ValueError(f"موجودی کافی نیست (موجودی فعلی: {fmt(old)} KG)")
         c.execute(text("UPDATE products SET stock=:s WHERE id=:id"), dict(s=new, id=product_id))
         mid = c.execute(
             text(
@@ -284,9 +284,9 @@ def tg_post(method, **kwargs):
 
 
 def report_text(kind, name, qty, old, new, note, when=None):
-    icon = "📥 ورود" if kind == "IN" else "📤 خروج"
+    icon = "📥 ورود به انبار" if kind == "IN" else "📤 خروج از انبار"
     when = when or datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
-    s = f"{icon} به انبار\nعطر: {name}\nتعداد: {fmt(qty)}\nموجودی: {fmt(old)} ← {fmt(new)}\nزمان: {when}"
+    s = f"{icon}\nعطر: {name}\nکیلو (KG): {fmt(qty)}\nموجودی: {fmt(old)} ← {fmt(new)} KG\nزمان: {when}"
     return s + (f"\nتوضیح: {note}" if note else "")
 
 
@@ -354,17 +354,17 @@ with tab_move:
                 "عطر",
                 df["id"],
                 format_func=lambda i: f"{df.loc[df.id == i, 'name'].iloc[0]} "
-                f"(موجودی: {fmt(df.loc[df.id == i, 'stock'].iloc[0])})",
+                f"(موجودی: {fmt(df.loc[df.id == i, 'stock'].iloc[0])} KG)",
             )
             kind_label = st.radio("نوع عملیات", ["ورود به انبار", "خروج از انبار"], horizontal=True)
-            qty = st.number_input("تعداد", min_value=0.001, value=1.0, step=0.001, format="%.3f")
+            qty = st.number_input("کیلو (KG)", min_value=0.001, value=1.0, step=0.001, format="%.3f")
             note = st.text_input("توضیح (اختیاری)")
             ok = st.form_submit_button("ثبت")
         if ok:
             kind = "IN" if kind_label == "ورود به انبار" else "OUT"
             try:
                 mid, name, old, new, min_stock = apply_movement(int(choice), kind, float(qty), note)
-                st.success(f"✅ در دیتابیس ذخیره شد — {name}: {fmt(old)} ← {fmt(new)}")
+                st.success(f"✅ در دیتابیس ذخیره شد — {name}: {fmt(old)} ← {fmt(new)} KG")
                 sent, msg = send_telegram(
                     report_text(kind, name, qty, old, new, note), [mid]
                 )
@@ -385,8 +385,8 @@ with tab_prod:
         c3, c4, c5, c6 = st.columns(4)
         size = c3.number_input("حجم (ml)", min_value=0, value=100, step=10)
         price = c4.number_input("قیمت فروش (تومان)", min_value=0, value=0, step=10000)
-        stock = c5.number_input("موجودی اولیه", min_value=0.0, value=0.0, step=0.001, format="%.3f")
-        min_stock = c6.number_input("حد هشدار", min_value=0.0, value=3.0, step=0.5)
+        stock = c5.number_input("موجودی اولیه (KG)", min_value=0.0, value=0.0, step=0.001, format="%.3f")
+        min_stock = c6.number_input("حد هشدار (KG)", min_value=0.0, value=3.0, step=0.5)
         if st.form_submit_button("افزودن محصول"):
             if not name.strip():
                 st.error("نام عطر را وارد کنید.")
@@ -400,12 +400,12 @@ with tab_prod:
 
     with st.expander("📥 ورود دسته‌ای موجودی از فایل اکسل"):
         st.caption(
-            "ستون اول: نام برند (بالای هر گروه) — ستون دوم: مدل — ستون سوم: موجودی. "
+            "ستون اول: نام برند (بالای هر گروه) — ستون دوم: مدل — ستون سوم: موجودی (به کیلوگرم). "
             "نام محصول به‌صورت «برند مدل» ثبت می‌شود. محصولاتی که قبلاً ثبت شده‌اند رد می‌شوند."
         )
         up = st.file_uploader("فایل اکسل (xlsx)", type=["xlsx"], key="stock_xlsx")
         imp_min = st.number_input(
-            "حد هشدار پیش‌فرض برای محصولات واردشده", min_value=0.0, value=1.0, step=0.5, key="imp_min"
+            "حد هشدار پیش‌فرض برای محصولات واردشده (KG)", min_value=0.0, value=1.0, step=0.5, key="imp_min"
         )
         if up is not None:
             try:
@@ -415,7 +415,7 @@ with tab_prod:
             else:
                 st.write(
                     f"{len(imp_df)} محصول از {imp_df['brand'].nunique()} برند — "
-                    f"مجموع موجودی: {fmt(imp_df['stock'].sum())}"
+                    f"مجموع موجودی: {fmt(imp_df['stock'].sum())} KG"
                 )
                 for w in warns:
                     st.warning(w)
@@ -425,7 +425,7 @@ with tab_prod:
                     st.success(f"✅ {added} محصول جدید ثبت شد؛ {skipped} مورد تکراری رد شد.")
                     sent, msg = send_telegram(
                         f"📦 ورود اولیه از اکسل\n{added} محصول جدید ثبت شد ({skipped} تکراری)\n"
-                        f"مجموع موجودی فایل: {fmt(imp_df['stock'].sum())}\n"
+                        f"مجموع موجودی فایل: {fmt(imp_df['stock'].sum())} KG\n"
                         f"زمان: {datetime.now(TZ):%Y-%m-%d %H:%M}"
                     )
                     (st.success if sent else st.warning)(msg)
