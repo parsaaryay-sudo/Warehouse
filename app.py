@@ -1,4 +1,5 @@
 import io
+import itertools
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -617,11 +618,16 @@ def slow_movers(p, mall, days=60):
     return d.sort_values("موجودی (KG)", ascending=False)
 
 
+_chart_seq = itertools.count()  # در هر اجرای اسکریپت از صفر شروع می‌شود
+
+
 def show(fig, empty="داده کافی برای این نمودار وجود ندارد."):
     if fig is None:
         st.info(empty)
     else:
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        # کلید یکتا: یک نمودار یکسان می‌تواند هم در داشبورد و هم در تب تحلیل نمایش داده شود
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False},
+                        key=f"chart_{next(_chart_seq)}")
 
 
 def kpi(icon, label, value, unit="", tone=""):
