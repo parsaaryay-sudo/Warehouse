@@ -338,8 +338,8 @@ def retry_unsent():
 
 
 # ---------------------------------------------------------------- ظاهر و استایل
-GOLD, WINE, TEAL, SAND, RED = "#B08D57", "#6D1F3A", "#3E7C7B", "#D98E73", "#B3261E"
-PALETTE = [GOLD, WINE, TEAL, "#2F4858", "#8E5572", "#C9A66B", SAND, "#5C6B73"]
+GOLD, WINE, TEAL, SAND, RED = "#D4AF6A", "#C2587A", "#4FB3A9", "#E8A07F", "#E5534B"
+PALETTE = [GOLD, WINE, TEAL, "#7FA7D9", "#B48EDB", "#E3C98F", SAND, "#8FA3AD"]
 STATUS_COLORS = {"عادی": TEAL, "کم‌موجودی": SAND, "تمام‌شده": RED}
 KIND_FA = {"IN": "ورود", "OUT": "خروج"}
 KIND_COLORS = {"ورود": TEAL, "خروج": WINE}
@@ -350,62 +350,73 @@ st.markdown(
     """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700&display=swap');
+:root { --bg:#100E14; --card:#1A1621; --card2:#221C2B; --line:#2E2836; --txt:#EDE3D3; --muted:#A99C92; --gold:#D4AF6A; --wine:#C2587A; }
 .stApp, .stApp p, .stApp label, .stApp input, .stApp textarea, .stApp button,
 .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stMarkdown, .stCaption,
 [data-testid="stMetric"], [data-baseweb="tab"] {
     font-family: 'Vazirmatn', Tahoma, sans-serif !important;
 }
-.stApp { direction: rtl; background: #FBF8F3; }
+.stApp { direction: rtl; background: radial-gradient(1200px 600px at 85% -10%, #2A1422 0%, var(--bg) 55%); color: var(--txt); }
+.stApp p, .stApp label, .stApp li, .stMarkdown, [data-testid="stWidgetLabel"] p { color: var(--txt); }
+.stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+header[data-testid="stHeader"] { background: transparent; }
 .block-container { padding-top: 1.6rem; max-width: 1250px; }
 #MainMenu, footer, [data-testid="stToolbar"] { visibility: hidden; }
 input, textarea { text-align: right; }
 
 .hero {
-    background: linear-gradient(135deg, #4A1428 0%, #6D1F3A 55%, #8B3A55 100%);
+    background: linear-gradient(135deg, #3B1020 0%, #5E1B35 55%, #7C2C4A 100%);
+    border: 1px solid rgba(212,175,106,.25);
     border-radius: 20px; padding: 26px 32px; margin-bottom: 18px;
     color: #F6EBD9; display: flex; justify-content: space-between; align-items: center;
-    box-shadow: 0 10px 30px rgba(109,31,58,.22); position: relative; overflow: hidden;
+    box-shadow: 0 12px 34px rgba(0,0,0,.45); position: relative; overflow: hidden;
 }
 .hero::after { content: "🧴"; position: absolute; left: 24px; bottom: -22px; font-size: 120px; opacity: .10; }
 .hero h1 { margin: 0; font-size: 1.9rem; font-weight: 700; color: #F6EBD9; padding: 0; }
-.hero p { margin: 4px 0 0; color: #D9C29A; font-size: .95rem; }
-.hero .date { text-align: left; font-size: .9rem; color: #D9C29A; line-height: 1.9; z-index: 1; }
+.hero p { margin: 4px 0 0; color: var(--gold); font-size: .95rem; }
+.hero .date { text-align: left; font-size: .9rem; color: var(--gold); line-height: 1.9; z-index: 1; }
 
 .kpi {
-    background: #fff; border-radius: 16px; padding: 16px 18px; display: flex; gap: 14px;
-    align-items: center; box-shadow: 0 2px 14px rgba(60,40,30,.07);
-    border: 1px solid #F0E7DA; margin-bottom: 14px; border-right: 5px solid #B08D57;
+    background: var(--card); border-radius: 16px; padding: 16px 18px; display: flex; gap: 14px;
+    align-items: center; box-shadow: 0 4px 18px rgba(0,0,0,.35);
+    border: 1px solid var(--line); margin-bottom: 14px; border-right: 5px solid var(--gold);
 }
-.kpi.warn { border-right-color: #D98E73; } .kpi.bad { border-right-color: #B3261E; }
-.kpi.good { border-right-color: #3E7C7B; } .kpi.wine { border-right-color: #6D1F3A; }
-.kpi-ic { font-size: 1.7rem; background: #FBF4E8; border-radius: 12px; width: 52px; height: 52px;
+.kpi.warn { border-right-color: #E8A07F; } .kpi.bad { border-right-color: #E5534B; }
+.kpi.good { border-right-color: #4FB3A9; } .kpi.wine { border-right-color: #C2587A; }
+.kpi-ic { font-size: 1.7rem; background: var(--card2); border-radius: 12px; width: 52px; height: 52px;
           display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.kpi-l { color: #7A6B63; font-size: .82rem; }
-.kpi-v { color: #2B2024; font-size: 1.45rem; font-weight: 700; line-height: 1.3; }
-.kpi-v small { font-size: .75rem; font-weight: 400; color: #7A6B63; margin-right: 5px; }
+.kpi-l { color: var(--muted); font-size: .82rem; }
+.kpi-v { color: #FFF6E6; font-size: 1.45rem; font-weight: 700; line-height: 1.3; }
+.kpi-v small { font-size: .75rem; font-weight: 400; color: var(--muted); margin-right: 5px; }
 
-.section-title { font-size: 1.05rem; font-weight: 700; color: #4A1428; margin: 8px 0 6px;
-                 padding-right: 10px; border-right: 4px solid #B08D57; }
-.chip { display: inline-block; background: #FCEBE4; color: #8A3B25; border-radius: 20px;
-        padding: 4px 12px; margin: 3px; font-size: .85rem; }
-.chip.bad { background: #FBE3E1; color: #8E1B14; }
+.section-title { font-size: 1.05rem; font-weight: 700; color: var(--gold); margin: 10px 0 6px;
+                 padding-right: 10px; border-right: 4px solid var(--wine); }
+.chip { display: inline-block; background: rgba(232,160,127,.15); color: #F0B89B; border: 1px solid rgba(232,160,127,.35);
+        border-radius: 20px; padding: 4px 12px; margin: 3px; font-size: .85rem; }
+.chip.bad { background: rgba(229,83,75,.15); color: #FF8F88; border-color: rgba(229,83,75,.4); }
 
-[data-baseweb="tab-list"] { gap: 6px; background: #F1E9DC; padding: 6px; border-radius: 14px; }
-[data-baseweb="tab"] { border-radius: 10px; padding: 8px 18px; height: auto; }
-[data-baseweb="tab"][aria-selected="true"] { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08); color: #6D1F3A; font-weight: 700; }
+[data-baseweb="tab-list"] { gap: 6px; background: var(--card); padding: 6px; border-radius: 14px; border: 1px solid var(--line); }
+[data-baseweb="tab"] { border-radius: 10px; padding: 8px 18px; height: auto; color: var(--muted); background: transparent; }
+[data-baseweb="tab"][aria-selected="true"] { background: var(--card2); color: var(--gold); font-weight: 700;
+                                             box-shadow: 0 2px 10px rgba(0,0,0,.4); }
 [data-baseweb="tab-highlight"], [data-baseweb="tab-border"] { display: none; }
 
-[data-testid="stForm"] { background: #fff; border: 1px solid #F0E7DA; border-radius: 18px;
-                         padding: 22px; box-shadow: 0 2px 14px rgba(60,40,30,.06); }
+[data-testid="stForm"] { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+                         padding: 22px; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+[data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="select"] > div, textarea {
+    background-color: var(--card2) !important; color: var(--txt) !important; border-color: var(--line) !important; border-radius: 10px !important;
+}
+input { color: var(--txt) !important; }
 .stButton > button, [data-testid="stFormSubmitButton"] > button, .stDownloadButton > button {
-    border-radius: 12px; border: 1px solid #6D1F3A; color: #6D1F3A; background: #fff; font-weight: 500; padding: .45rem 1.2rem;
+    border-radius: 12px; border: 1px solid var(--gold); color: var(--gold); background: transparent; font-weight: 500; padding: .45rem 1.2rem;
 }
 [data-testid="stFormSubmitButton"] > button {
-    background: linear-gradient(135deg, #6D1F3A, #8B3A55); color: #fff; border: none; width: 100%; padding: .6rem;
+    background: linear-gradient(135deg, #8E3358, #C2587A); color: #fff; border: none; width: 100%; padding: .6rem;
 }
-.stButton > button:hover, .stDownloadButton > button:hover { background: #6D1F3A; color: #fff; border-color: #6D1F3A; }
-[data-testid="stExpander"] { background: #fff; border-radius: 14px; border: 1px solid #F0E7DA; }
-[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; border: 1px solid #F0E7DA; }
+.stButton > button:hover, .stDownloadButton > button:hover { background: var(--gold); color: #1A1621; border-color: var(--gold); }
+[data-testid="stExpander"] { background: var(--card); border-radius: 14px; border: 1px solid var(--line); }
+[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+[data-testid="stAlert"] { border-radius: 12px; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -434,7 +445,7 @@ def today_fa():
 
 def style(fig, h=380):
     fig.update_layout(
-        font=dict(family="Vazirmatn, Tahoma, sans-serif", size=13, color="#2B2024"),
+        font=dict(family="Vazirmatn, Tahoma, sans-serif", size=13, color="#EDE3D3"),
         height=h,
         margin=dict(l=10, r=10, t=30, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -443,7 +454,7 @@ def style(fig, h=380):
         colorway=PALETTE,
     )
     fig.update_xaxes(showgrid=False, title_text=fig.layout.xaxis.title.text or "")
-    fig.update_yaxes(gridcolor="#EFE7DA")
+    fig.update_yaxes(gridcolor="#2E2836", zerolinecolor="#2E2836")
     return fig
 
 
@@ -538,7 +549,7 @@ def fig_cumulative(mall):
     d["total"] = d["signed"].cumsum()
     fig = px.area(d, x="created_at", y="total", labels={"created_at": "", "total": "کل موجودی انبار (KG)"},
                   color_discrete_sequence=[WINE])
-    fig.update_traces(line_shape="hv", fillcolor="rgba(109,31,58,.15)")
+    fig.update_traces(line_shape="hv", fillcolor="rgba(194,88,122,.22)")
     return style(fig, 340)
 
 
@@ -549,7 +560,7 @@ def fig_heatmap(m):
     o = o.assign(wd=o["created_at"].dt.dayofweek.map(WEEKDAY_INDEX), hr=o["created_at"].dt.hour)
     pv = o.pivot_table(index="wd", columns="hr", values="qty", aggfunc="sum", fill_value=0)
     pv = pv.reindex(index=WEEKDAYS, columns=range(24), fill_value=0)
-    fig = px.imshow(pv, aspect="auto", color_continuous_scale=["#FBF4E8", GOLD, WINE],
+    fig = px.imshow(pv, aspect="auto", color_continuous_scale=["#1C1822", "#7A5A2E", GOLD, "#F3D9A0"],
                     labels=dict(x="ساعت", y="", color="KG"))
     return style(fig, 340)
 
@@ -644,7 +655,7 @@ with tab_dash:
     else:
         low = P[P["status"] == "کم‌موجودی"]
         out_ = P[P["status"] == "تمام‌شده"]
-        today = now_local().normalize()
+        today = now_local().replace(hour=0, minute=0, second=0, microsecond=0)
         td = M[M["created_at"] >= today] if not M.empty else M
         tin = td.loc[td["kind"] == "IN", "qty"].sum() if not td.empty else 0
         tout = td.loc[td["kind"] == "OUT", "qty"].sum() if not td.empty else 0
