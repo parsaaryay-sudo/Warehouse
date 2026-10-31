@@ -641,7 +641,7 @@ def title(t):
 
 # ---------------------------------------------------------------- رابط
 st.markdown(
-    f"""<div class="hero"><div><h1>مدیریت انبار عطرفروشی</h1>
+    f"""<div class="hero"><div><h1>مدیریت انبار شعبه پلاتین</h1>
     <p>ثبت لحظه‌ای ورود و خروج، گزارش خودکار تلگرام و تحلیل موجودی</p></div>
     <div class="date">📅 {today_fa()}<br>🕒 {now_local():%H:%M}</div></div>""",
     unsafe_allow_html=True,
