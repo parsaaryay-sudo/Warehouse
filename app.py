@@ -1,6 +1,6 @@
 import io
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -253,7 +253,7 @@ def apply_movement(product_id, kind, qty, note):
         old = row.stock
         new = old + qty if kind == "IN" else old - qty
         if new < 0:
-            raise ValueError(f"موجودی کافی نیست (موجودی فعلی: {fmt(old)} KG)")
+            raise ValueError(f"موجودی کافی نیست (موجودی فعلی: {fmt(old)})")
         c.execute(text("UPDATE products SET stock=:s WHERE id=:id"), dict(s=new, id=product_id))
         mid = c.execute(
             text(
@@ -286,7 +286,7 @@ def tg_post(method, **kwargs):
 def report_text(kind, name, qty, old, new, note, when=None):
     icon = "📥 ورود به انبار" if kind == "IN" else "📤 خروج از انبار"
     when = when or datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
-    s = f"{icon}\nعطر: {name}\nکیلو (KG): {fmt(qty)}\nموجودی: {fmt(old)} ← {fmt(new)} KG\nزمان: {when}"
+    s = f"{icon}\nعطر: {name}\nمقدار: {fmt(qty)} کیلوگرم (KG)\nموجودی: {fmt(old)} ← {fmt(new)} کیلوگرم (KG)\nزمان: {when}"
     return s + (f"\nتوضیح: {note}" if note else "")
 
 
@@ -337,11 +337,358 @@ def retry_unsent():
     )
 
 
-# ---------------------------------------------------------------- رابط
-st.title("🧴 مدیریت انبار عطرفروشی")
-tab_move, tab_prod, tab_charts, tab_data = st.tabs(
-    ["ورود / خروج", "محصولات", "نمودارها", "داده‌ها و پشتیبان"]
+# ---------------------------------------------------------------- ظاهر و استایل
+GOLD, WINE, TEAL, SAND, RED = "#B08D57", "#6D1F3A", "#3E7C7B", "#D98E73", "#B3261E"
+PALETTE = [GOLD, WINE, TEAL, "#2F4858", "#8E5572", "#C9A66B", SAND, "#5C6B73"]
+STATUS_COLORS = {"عادی": TEAL, "کم‌موجودی": SAND, "تمام‌شده": RED}
+KIND_FA = {"IN": "ورود", "OUT": "خروج"}
+KIND_COLORS = {"ورود": TEAL, "خروج": WINE}
+WEEKDAYS = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"]
+WEEKDAY_INDEX = {5: "شنبه", 6: "یکشنبه", 0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنجشنبه", 4: "جمعه"}
+
+st.markdown(
+    """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700&display=swap');
+.stApp, .stApp p, .stApp label, .stApp input, .stApp textarea, .stApp button,
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stMarkdown, .stCaption,
+[data-testid="stMetric"], [data-baseweb="tab"] {
+    font-family: 'Vazirmatn', Tahoma, sans-serif !important;
+}
+.stApp { direction: rtl; background: #FBF8F3; }
+.block-container { padding-top: 1.6rem; max-width: 1250px; }
+#MainMenu, footer, [data-testid="stToolbar"] { visibility: hidden; }
+input, textarea { text-align: right; }
+
+.hero {
+    background: linear-gradient(135deg, #4A1428 0%, #6D1F3A 55%, #8B3A55 100%);
+    border-radius: 20px; padding: 26px 32px; margin-bottom: 18px;
+    color: #F6EBD9; display: flex; justify-content: space-between; align-items: center;
+    box-shadow: 0 10px 30px rgba(109,31,58,.22); position: relative; overflow: hidden;
+}
+.hero::after { content: "🧴"; position: absolute; left: 24px; bottom: -22px; font-size: 120px; opacity: .10; }
+.hero h1 { margin: 0; font-size: 1.9rem; font-weight: 700; color: #F6EBD9; padding: 0; }
+.hero p { margin: 4px 0 0; color: #D9C29A; font-size: .95rem; }
+.hero .date { text-align: left; font-size: .9rem; color: #D9C29A; line-height: 1.9; z-index: 1; }
+
+.kpi {
+    background: #fff; border-radius: 16px; padding: 16px 18px; display: flex; gap: 14px;
+    align-items: center; box-shadow: 0 2px 14px rgba(60,40,30,.07);
+    border: 1px solid #F0E7DA; margin-bottom: 14px; border-right: 5px solid #B08D57;
+}
+.kpi.warn { border-right-color: #D98E73; } .kpi.bad { border-right-color: #B3261E; }
+.kpi.good { border-right-color: #3E7C7B; } .kpi.wine { border-right-color: #6D1F3A; }
+.kpi-ic { font-size: 1.7rem; background: #FBF4E8; border-radius: 12px; width: 52px; height: 52px;
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.kpi-l { color: #7A6B63; font-size: .82rem; }
+.kpi-v { color: #2B2024; font-size: 1.45rem; font-weight: 700; line-height: 1.3; }
+.kpi-v small { font-size: .75rem; font-weight: 400; color: #7A6B63; margin-right: 5px; }
+
+.section-title { font-size: 1.05rem; font-weight: 700; color: #4A1428; margin: 8px 0 6px;
+                 padding-right: 10px; border-right: 4px solid #B08D57; }
+.chip { display: inline-block; background: #FCEBE4; color: #8A3B25; border-radius: 20px;
+        padding: 4px 12px; margin: 3px; font-size: .85rem; }
+.chip.bad { background: #FBE3E1; color: #8E1B14; }
+
+[data-baseweb="tab-list"] { gap: 6px; background: #F1E9DC; padding: 6px; border-radius: 14px; }
+[data-baseweb="tab"] { border-radius: 10px; padding: 8px 18px; height: auto; }
+[data-baseweb="tab"][aria-selected="true"] { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08); color: #6D1F3A; font-weight: 700; }
+[data-baseweb="tab-highlight"], [data-baseweb="tab-border"] { display: none; }
+
+[data-testid="stForm"] { background: #fff; border: 1px solid #F0E7DA; border-radius: 18px;
+                         padding: 22px; box-shadow: 0 2px 14px rgba(60,40,30,.06); }
+.stButton > button, [data-testid="stFormSubmitButton"] > button, .stDownloadButton > button {
+    border-radius: 12px; border: 1px solid #6D1F3A; color: #6D1F3A; background: #fff; font-weight: 500; padding: .45rem 1.2rem;
+}
+[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(135deg, #6D1F3A, #8B3A55); color: #fff; border: none; width: 100%; padding: .6rem;
+}
+.stButton > button:hover, .stDownloadButton > button:hover { background: #6D1F3A; color: #fff; border-color: #6D1F3A; }
+[data-testid="stExpander"] { background: #fff; border-radius: 14px; border: 1px solid #F0E7DA; }
+[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; border: 1px solid #F0E7DA; }
+</style>
+""",
+    unsafe_allow_html=True,
 )
+
+
+# ---------------------------------------------------------------- توابع نمودار (فقط داده ← شکل)
+def now_local():
+    return datetime.now(TZ).replace(tzinfo=None)
+
+
+def num(x, d=2):
+    s = f"{float(x):,.{d}f}"
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def today_fa():
+    try:
+        import jdatetime
+
+        j = jdatetime.datetime.fromgregorian(datetime=now_local())
+        return f"{j.year}/{j.month:02d}/{j.day:02d}"
+    except Exception:
+        return now_local().strftime("%Y-%m-%d")
+
+
+def style(fig, h=380):
+    fig.update_layout(
+        font=dict(family="Vazirmatn, Tahoma, sans-serif", size=13, color="#2B2024"),
+        height=h,
+        margin=dict(l=10, r=10, t=30, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", y=-0.18, title_text=""),
+        colorway=PALETTE,
+    )
+    fig.update_xaxes(showgrid=False, title_text=fig.layout.xaxis.title.text or "")
+    fig.update_yaxes(gridcolor="#EFE7DA")
+    return fig
+
+
+def prep_products(pdf):
+    d = pdf.copy()
+    d["brand"] = d["brand"].replace("", "بدون برند")
+    d["status"] = "عادی"
+    d.loc[d["stock"] <= d["min_stock"], "status"] = "کم‌موجودی"
+    d.loc[d["stock"] <= 0, "status"] = "تمام‌شده"
+    d["value"] = d["stock"] * d["price"]
+    return d
+
+
+def prep_moves(mdf, include_initial=False):
+    m = mdf.copy()
+    if m.empty:
+        return m
+    m["brand"] = m["brand"].replace("", "بدون برند")
+    m["kind_fa"] = m["kind"].map(KIND_FA)
+    m["signed"] = m["qty"].where(m["kind"] == "IN", -m["qty"])
+    m["initial"] = m["note"].str.startswith("موجودی اولیه")
+    return m if include_initial else m[~m["initial"]]
+
+
+def in_period(m, days):
+    if days is None or m.empty:
+        return m
+    return m[m["created_at"] >= now_local() - timedelta(days=days)]
+
+
+def fig_stock_bar(p, n=15):
+    d = p.sort_values("stock", ascending=False).head(n).sort_values("stock")
+    d["txt"] = d["stock"].map(fmt)
+    fig = px.bar(d, x="stock", y="name", orientation="h", color="status", text="txt",
+                 color_discrete_map=STATUS_COLORS, labels={"stock": "موجودی (KG)", "name": "", "status": ""})
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    return style(fig, max(320, 30 * len(d) + 90))
+
+
+def fig_brand_donut(p, col="stock", title_unit="KG"):
+    g = p.groupby("brand", as_index=False)[col].sum()
+    g = g[g[col] > 0]
+    if g.empty:
+        return None
+    fig = px.pie(g, names="brand", values=col, hole=0.55)
+    fig.update_traces(textinfo="percent", hovertemplate="%{label}<br>%{value:,.2f} " + title_unit + "<extra></extra>")
+    return style(fig, 340)
+
+
+def fig_status_donut(p):
+    g = p.groupby("status", as_index=False).size()
+    fig = px.pie(g, names="status", values="size", hole=0.55, color="status", color_discrete_map=STATUS_COLORS)
+    fig.update_traces(textinfo="label+value")
+    return style(fig, 340)
+
+
+def fig_treemap(p):
+    d = p[p["stock"] > 0]
+    if d.empty:
+        return None
+    fig = px.treemap(d, path=[px.Constant("انبار"), "brand", "name"], values="stock", color="brand",
+                     color_discrete_sequence=PALETTE)
+    fig.update_traces(textinfo="label+value", hovertemplate="%{label}<br>%{value:,.2f} KG<extra></extra>")
+    return style(fig, 460)
+
+
+def fig_value_brand(p):
+    g = p.groupby("brand", as_index=False)["value"].sum().sort_values("value", ascending=False)
+    if g["value"].sum() <= 0:
+        return None
+    fig = px.bar(g, x="brand", y="value", labels={"brand": "", "value": "ارزش (تومان)"}, color_discrete_sequence=[GOLD])
+    return style(fig, 340)
+
+
+def fig_daily(m):
+    if m.empty:
+        return None
+    m = m.assign(day=m["created_at"].dt.normalize())
+    d = m.groupby(["day", "kind_fa"], as_index=False)["qty"].sum()
+    fig = px.bar(d, x="day", y="qty", color="kind_fa", barmode="group", color_discrete_map=KIND_COLORS,
+                 labels={"day": "", "qty": "مقدار (KG)", "kind_fa": ""})
+    net = m.groupby("day", as_index=False)["signed"].sum()
+    fig.add_scatter(x=net["day"], y=net["signed"], mode="lines+markers", name="خالص تغییر",
+                    line=dict(color=GOLD, width=3))
+    return style(fig, 380)
+
+
+def fig_cumulative(mall):
+    if mall.empty:
+        return None
+    d = mall.sort_values("created_at").copy()
+    d["total"] = d["signed"].cumsum()
+    fig = px.area(d, x="created_at", y="total", labels={"created_at": "", "total": "کل موجودی انبار (KG)"},
+                  color_discrete_sequence=[WINE])
+    fig.update_traces(line_shape="hv", fillcolor="rgba(109,31,58,.15)")
+    return style(fig, 340)
+
+
+def fig_heatmap(m):
+    o = m[m["kind"] == "OUT"]
+    if o.empty:
+        return None
+    o = o.assign(wd=o["created_at"].dt.dayofweek.map(WEEKDAY_INDEX), hr=o["created_at"].dt.hour)
+    pv = o.pivot_table(index="wd", columns="hr", values="qty", aggfunc="sum", fill_value=0)
+    pv = pv.reindex(index=WEEKDAYS, columns=range(24), fill_value=0)
+    fig = px.imshow(pv, aspect="auto", color_continuous_scale=["#FBF4E8", GOLD, WINE],
+                    labels=dict(x="ساعت", y="", color="KG"))
+    return style(fig, 340)
+
+
+def fig_top_out(m, by="name", n=10):
+    o = m[m["kind"] == "OUT"]
+    if o.empty:
+        return None
+    g = o.groupby(by, as_index=False)["qty"].sum().nlargest(n, "qty").sort_values("qty")
+    fig = px.bar(g, x="qty", y=by, orientation="h", labels={"qty": "خروج (KG)", by: ""},
+                 color_discrete_sequence=[WINE], text=g["qty"].map(fmt))
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    return style(fig, max(300, 32 * len(g) + 80))
+
+
+def fig_trend(mall, names):
+    d = mall[mall["name"].isin(names)]
+    if d.empty:
+        return None
+    fig = px.line(d, x="created_at", y="stock_after", color="name", markers=True, line_shape="hv",
+                  labels={"created_at": "", "stock_after": "موجودی (KG)", "name": ""})
+    return style(fig, 380)
+
+
+def cover_df(p, mall, window=30, n=10):
+    o = mall[(mall["kind"] == "OUT") & (mall["created_at"] >= now_local() - timedelta(days=window))]
+    if o.empty:
+        return None
+    rate = (o.groupby("name")["qty"].sum() / window).rename("rate")
+    d = p.set_index("name").join(rate, how="inner")
+    d = d[d["rate"] > 0].copy()
+    d["days_left"] = d["stock"] / d["rate"]
+    return d.reset_index().nsmallest(n, "days_left")
+
+
+def fig_cover(p, mall):
+    d = cover_df(p, mall)
+    if d is None or d.empty:
+        return None
+    d = d.sort_values("days_left", ascending=False)
+    fig = px.bar(d, x="days_left", y="name", orientation="h", labels={"days_left": "روز تا اتمام موجودی", "name": ""},
+                 color_discrete_sequence=[SAND], text=d["days_left"].map(lambda x: num(x, 0)))
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    return style(fig, max(300, 32 * len(d) + 80))
+
+
+def slow_movers(p, mall, days=60):
+    last_out = mall[mall["kind"] == "OUT"].groupby("name")["created_at"].max().rename("آخرین خروج")
+    d = p[p["stock"] > 0].set_index("name").join(last_out)
+    cutoff = now_local() - timedelta(days=days)
+    d = d[d["آخرین خروج"].isna() | (d["آخرین خروج"] < cutoff)]
+    d = d.reset_index()[["name", "brand", "stock", "آخرین خروج"]]
+    d.columns = ["عطر", "برند", "موجودی (KG)", "آخرین خروج"]
+    return d.sort_values("موجودی (KG)", ascending=False)
+
+
+def show(fig, empty="داده کافی برای این نمودار وجود ندارد."):
+    if fig is None:
+        st.info(empty)
+    else:
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
+def kpi(icon, label, value, unit="", tone=""):
+    return (f'<div class="kpi {tone}"><div class="kpi-ic">{icon}</div><div><div class="kpi-l">{label}</div>'
+            f'<div class="kpi-v">{value}<small>{unit}</small></div></div></div>')
+
+
+def title(t):
+    st.markdown(f'<div class="section-title">{t}</div>', unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------- رابط
+st.markdown(
+    f"""<div class="hero"><div><h1>مدیریت انبار عطرفروشی</h1>
+    <p>ثبت لحظه‌ای ورود و خروج، گزارش خودکار تلگرام و تحلیل موجودی</p></div>
+    <div class="date">📅 {today_fa()}<br>🕒 {now_local():%H:%M}</div></div>""",
+    unsafe_allow_html=True,
+)
+
+tab_dash, tab_move, tab_prod, tab_charts, tab_data = st.tabs(
+    ["📊 داشبورد", "📦 ورود / خروج", "🧴 محصولات", "📈 تحلیل و نمودارها", "🗂️ داده‌ها و پشتیبان"]
+)
+
+# ------------------------- داشبورد
+with tab_dash:
+    P = prep_products(products_df())
+    M_all = prep_moves(movements_df(), include_initial=True)
+    M = prep_moves(movements_df())
+    if P.empty:
+        st.info("هنوز محصولی ثبت نشده است. از تب «محصولات» شروع کنید.")
+    else:
+        low = P[P["status"] == "کم‌موجودی"]
+        out_ = P[P["status"] == "تمام‌شده"]
+        today = now_local().normalize()
+        td = M[M["created_at"] >= today] if not M.empty else M
+        tin = td.loc[td["kind"] == "IN", "qty"].sum() if not td.empty else 0
+        tout = td.loc[td["kind"] == "OUT", "qty"].sum() if not td.empty else 0
+        m30 = in_period(M, 30)
+        out30 = m30.loc[m30["kind"] == "OUT", "qty"].sum() if not m30.empty else 0
+
+        r1 = st.columns(4)
+        r1[0].markdown(kpi("⚖️", "کل موجودی انبار", num(P["stock"].sum()), "KG"), unsafe_allow_html=True)
+        r1[1].markdown(kpi("🧴", "تعداد محصول فعال", len(P), "عطر", "wine"), unsafe_allow_html=True)
+        r1[2].markdown(kpi("⚠️", "کم‌موجودی", len(low), "عطر", "warn"), unsafe_allow_html=True)
+        r1[3].markdown(kpi("⛔", "تمام‌شده", len(out_), "عطر", "bad"), unsafe_allow_html=True)
+        r2 = st.columns(4)
+        r2[0].markdown(kpi("📥", "ورود امروز", num(tin), "KG", "good"), unsafe_allow_html=True)
+        r2[1].markdown(kpi("📤", "خروج امروز", num(tout), "KG", "wine"), unsafe_allow_html=True)
+        r2[2].markdown(kpi("📆", "خروج ۳۰ روز اخیر", num(out30), "KG"), unsafe_allow_html=True)
+        val = P["value"].sum()
+        r2[3].markdown(kpi("💰", "ارزش موجودی", num(val, 0) if val > 0 else "—", "تومان" if val > 0 else ""),
+                       unsafe_allow_html=True)
+
+        a, b = st.columns([3, 2])
+        with a:
+            title("ورود و خروج ۱۴ روز اخیر")
+            show(fig_daily(in_period(M, 14)), "در ۱۴ روز اخیر حرکتی ثبت نشده است.")
+        with b:
+            title("سهم برندها از موجودی")
+            show(fig_brand_donut(P))
+
+        a, b = st.columns([3, 2])
+        with a:
+            title("آخرین حرکت‌ها")
+            if M_all.empty:
+                st.info("هنوز حرکتی ثبت نشده است.")
+            else:
+                rec = M_all.iloc[::-1].head(8)[["created_at", "name", "kind_fa", "qty", "stock_after"]]
+                rec.columns = ["زمان", "عطر", "نوع", "مقدار (KG)", "موجودی پس از عملیات"]
+                st.dataframe(rec, use_container_width=True, hide_index=True)
+        with b:
+            title("نیازمند سفارش / شارژ")
+            if low.empty and out_.empty:
+                st.success("همه عطرها بالاتر از حد هشدار هستند. ✅")
+            else:
+                chips = "".join(f'<span class="chip bad">{r.name} · {fmt(r.stock)}</span>' for r in out_.itertuples())
+                chips += "".join(f'<span class="chip">{r.name} · {fmt(r.stock)}</span>' for r in low.itertuples())
+                st.markdown(chips, unsafe_allow_html=True)
 
 # ------------------------- ورود / خروج
 with tab_move:
@@ -357,9 +704,9 @@ with tab_move:
                 f"(موجودی: {fmt(df.loc[df.id == i, 'stock'].iloc[0])} KG)",
             )
             kind_label = st.radio("نوع عملیات", ["ورود به انبار", "خروج از انبار"], horizontal=True)
-            qty = st.number_input("کیلو (KG)", min_value=0.001, value=1.0, step=0.001, format="%.3f")
+            qty = st.number_input("مقدار (کیلوگرم - KG)", min_value=0.001, value=1.0, step=0.001, format="%.3f")
             note = st.text_input("توضیح (اختیاری)")
-            ok = st.form_submit_button("ثبت")
+            ok = st.form_submit_button("ثبت عملیات")
         if ok:
             kind = "IN" if kind_label == "ورود به انبار" else "OUT"
             try:
@@ -375,6 +722,15 @@ with tab_move:
                     st.warning("⚠️ موجودی به حد هشدار رسیده است.")
             except ValueError as e:
                 st.error(str(e))
+
+        title("آخرین عملیات ثبت‌شده")
+        _m = prep_moves(movements_df(), include_initial=True)
+        if _m.empty:
+            st.caption("هنوز عملیاتی ثبت نشده است.")
+        else:
+            _r = _m.iloc[::-1].head(6)[["created_at", "name", "kind_fa", "qty", "stock_after"]]
+            _r.columns = ["زمان", "عطر", "نوع", "مقدار (KG)", "موجودی پس از عملیات"]
+            st.dataframe(_r, use_container_width=True, hide_index=True)
 
 # ------------------------- محصولات
 with tab_prod:
@@ -400,12 +756,12 @@ with tab_prod:
 
     with st.expander("📥 ورود دسته‌ای موجودی از فایل اکسل"):
         st.caption(
-            "ستون اول: نام برند (بالای هر گروه) — ستون دوم: مدل — ستون سوم: موجودی (به کیلوگرم). "
+            "ستون اول: نام برند (بالای هر گروه) — ستون دوم: مدل — ستون سوم: موجودی. "
             "نام محصول به‌صورت «برند مدل» ثبت می‌شود. محصولاتی که قبلاً ثبت شده‌اند رد می‌شوند."
         )
         up = st.file_uploader("فایل اکسل (xlsx)", type=["xlsx"], key="stock_xlsx")
         imp_min = st.number_input(
-            "حد هشدار پیش‌فرض برای محصولات واردشده (KG)", min_value=0.0, value=1.0, step=0.5, key="imp_min"
+            "حد هشدار پیش‌فرض برای محصولات واردشده", min_value=0.0, value=1.0, step=0.5, key="imp_min"
         )
         if up is not None:
             try:
@@ -415,7 +771,7 @@ with tab_prod:
             else:
                 st.write(
                     f"{len(imp_df)} محصول از {imp_df['brand'].nunique()} برند — "
-                    f"مجموع موجودی: {fmt(imp_df['stock'].sum())} KG"
+                    f"مجموع موجودی: {fmt(imp_df['stock'].sum())}"
                 )
                 for w in warns:
                     st.warning(w)
@@ -425,16 +781,23 @@ with tab_prod:
                     st.success(f"✅ {added} محصول جدید ثبت شد؛ {skipped} مورد تکراری رد شد.")
                     sent, msg = send_telegram(
                         f"📦 ورود اولیه از اکسل\n{added} محصول جدید ثبت شد ({skipped} تکراری)\n"
-                        f"مجموع موجودی فایل: {fmt(imp_df['stock'].sum())} KG\n"
+                        f"مجموع موجودی فایل: {fmt(imp_df['stock'].sum())} کیلوگرم (KG)\n"
                         f"زمان: {datetime.now(TZ):%Y-%m-%d %H:%M}"
                     )
                     (st.success if sent else st.warning)(msg)
 
-    st.dataframe(
-        products_df().drop(columns=["active", "created_at"]),
-        use_container_width=True,
-        hide_index=True,
-    )
+    title("لیست محصولات")
+    _p = prep_products(products_df())
+    if not _p.empty:
+        q = st.text_input("🔎 جستجو در نام یا برند", key="prod_search")
+        if q.strip():
+            _p = _p[_p["name"].str.contains(q.strip(), case=False, na=False)
+                    | _p["brand"].str.contains(q.strip(), case=False, na=False)]
+        _show = _p[["name", "brand", "size_ml", "price", "stock", "min_stock", "status"]]
+        _show.columns = ["نام عطر", "برند", "حجم (ml)", "قیمت (تومان)", "موجودی (KG)", "حد هشدار (KG)", "وضعیت"]
+        st.dataframe(_show, use_container_width=True, hide_index=True)
+    else:
+        st.caption("محصولی ثبت نشده است.")
 
     # حذف نرم: محصول هرگز پاک نمی‌شود تا تاریخچه سالم بماند
     with st.expander("غیرفعال / فعال‌سازی محصول (حذف نمی‌شود، تاریخچه حفظ می‌شود)"):
@@ -452,46 +815,72 @@ with tab_prod:
                 set_active(int(pid), not is_active)
                 st.rerun()
 
-# ------------------------- نمودارها
+# ------------------------- تحلیل و نمودارها
 with tab_charts:
-    pdf, mdf = products_df(), movements_df()
-    options = [
-        "موجودی هر عطر",
-        "عطرهای کم‌موجودی",
-        "ورود و خروج روزانه",
-        "پرفروش‌ترین عطرها",
-        "ارزش موجودی به تفکیک برند",
-        "روند موجودی هر عطر",
-    ]
-    chosen = st.multiselect("نمودارهای مورد نظر را انتخاب کنید", options)
-    if st.button("نمایش نمودارها") and chosen:
-        for ch in chosen:
-            st.subheader(ch)
-            if ch == options[0] and not pdf.empty:
-                st.plotly_chart(px.bar(pdf, x="name", y="stock"), use_container_width=True)
-            elif ch == options[1] and not pdf.empty:
-                low = pdf[pdf["stock"] <= pdf["min_stock"]]
-                if low.empty:
-                    st.success("همه عطرها بالاتر از حد هشدار هستند.")
-                else:
-                    st.plotly_chart(px.bar(low, x="name", y="stock", color_discrete_sequence=["crimson"]), use_container_width=True)
-            elif ch == options[2] and not mdf.empty:
-                d = mdf.assign(day=mdf["created_at"].dt.date).groupby(["day", "kind"], as_index=False)["qty"].sum()
-                st.plotly_chart(px.bar(d, x="day", y="qty", color="kind", barmode="group"), use_container_width=True)
-            elif ch == options[3] and not mdf.empty:
-                top = mdf[mdf.kind == "OUT"].groupby("name", as_index=False)["qty"].sum().nlargest(10, "qty")
-                st.plotly_chart(px.bar(top, x="name", y="qty"), use_container_width=True)
-            elif ch == options[4] and not pdf.empty:
-                v = pdf.assign(value=pdf.stock * pdf.price).groupby("brand", as_index=False)["value"].sum()
-                st.plotly_chart(px.pie(v, names="brand", values="value"), use_container_width=True)
-            elif ch == options[5] and not mdf.empty:
-                st.plotly_chart(px.line(mdf, x="created_at", y="stock_after", color="name", markers=True), use_container_width=True)
+    P = prep_products(products_df())
+    raw_m = movements_df()
+    if P.empty:
+        st.info("هنوز داده‌ای برای تحلیل وجود ندارد.")
+    else:
+        f1, f2 = st.columns([3, 2])
+        period = f1.radio("بازه زمانی", ["۷ روز اخیر", "۳۰ روز اخیر", "۹۰ روز اخیر", "همه"], index=1, horizontal=True)
+        with_init = f2.checkbox("شامل موجودی اولیه (ورود از اکسل)", value=False)
+        days = {"۷ روز اخیر": 7, "۳۰ روز اخیر": 30, "۹۰ روز اخیر": 90, "همه": None}[period]
+        M_all = prep_moves(raw_m, include_initial=True)
+        M = in_period(prep_moves(raw_m, include_initial=with_init), days)
+
+        t1, t2, t3 = st.tabs(["🧴 وضعیت موجودی", "🔄 گردش کالا", "🔬 تحلیل پیشرفته"])
+
+        with t1:
+            title("موجودی هر عطر")
+            n = st.slider("تعداد عطر در نمودار", 5, min(50, max(6, len(P))), min(15, max(5, len(P))))
+            show(fig_stock_bar(P, n))
+            a, b = st.columns(2)
+            with a:
+                title("وضعیت موجودی عطرها")
+                show(fig_status_donut(P))
+            with b:
+                title("سهم برندها از موجودی (KG)")
+                show(fig_brand_donut(P))
+            title("نقشه درختی: برند ← عطر")
+            show(fig_treemap(P))
+            if P["value"].sum() > 0:
+                title("ارزش موجودی به تفکیک برند (تومان)")
+                show(fig_value_brand(P))
+
+        with t2:
+            title("ورود و خروج روزانه و خالص تغییر")
+            show(fig_daily(M), "در این بازه حرکتی ثبت نشده است.")
+            title("روند کل موجودی انبار")
+            show(fig_cumulative(M_all))
+            a, b = st.columns(2)
+            with a:
+                title("پرفروش‌ترین عطرها (خروج)")
+                show(fig_top_out(M, "name"), "در این بازه خروجی ثبت نشده است.")
+            with b:
+                title("پرفروش‌ترین برندها (خروج)")
+                show(fig_top_out(M, "brand"), "در این بازه خروجی ثبت نشده است.")
+
+        with t3:
+            title("چه روز و ساعتی بیشترین خروج را داریم؟")
+            show(fig_heatmap(M), "در این بازه خروجی ثبت نشده است.")
+            title("تخمین زمان اتمام موجودی (بر اساس میانگین خروج ۳۰ روز اخیر)")
+            show(fig_cover(P, M_all), "برای تخمین، حداقل یک خروج در ۳۰ روز اخیر لازم است.")
+            title("روند موجودی عطرهای انتخابی")
+            default = list(M_all[M_all["kind"] == "OUT"]["name"].value_counts().head(3).index) if not M_all.empty else []
+            picked = st.multiselect("عطرها", list(P["name"]), default=default)
+            show(fig_trend(M_all, picked) if picked else None, "یک یا چند عطر انتخاب کنید.")
+            title("کم‌گردش‌ها: موجودی دارند ولی مدتی خروج نداشته‌اند")
+            sm_days = st.select_slider("حداقل مدت بدون خروج (روز)", [30, 60, 90, 180], value=60)
+            slow = slow_movers(P, M_all, sm_days)
+            if slow.empty:
+                st.success("همه عطرهای دارای موجودی در این مدت فروش داشته‌اند. ✅")
             else:
-                st.info("داده کافی برای این نمودار وجود ندارد.")
+                st.dataframe(slow, use_container_width=True, hide_index=True)
 
 # ------------------------- داده‌ها و پشتیبان
 with tab_data:
-    st.subheader("تاریخچه تغییرات")
+    title("تاریخچه تغییرات")
     st.dataframe(movements_df().iloc[::-1], use_container_width=True, hide_index=True)
 
     c1, c2, c3 = st.columns(3)
