@@ -5,3 +5,4 @@ openpyxl
 requests
 sqlalchemy
 psycopg2-binary
+jdatetime
