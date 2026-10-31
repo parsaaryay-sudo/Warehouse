@@ -850,7 +850,7 @@ with tab_charts:
 
         with t1:
             title("موجودی هر عطر")
-            n = st.slider("تعداد عطر در نمودار", 5, min(50, max(6, len(P))), min(15, max(5, len(P))))
+            n = st.slider("تعداد عطر در نمودار", 5, max(6, len(P)), min(15, max(5, len(P))))
             show(fig_stock_bar(P, n))
             a, b = st.columns(2)
             with a:
